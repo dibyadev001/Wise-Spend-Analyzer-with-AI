@@ -1,0 +1,1101 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WiseSpend — Smart Expense Tracker</title>
+  <meta name="description" content="Track expenses, set budgets, and get AI-powered spending insights with WiseSpend.">
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            surface:  '#0f1117',
+            card:     '#161b27',
+            cardHov:  '#1d2438',
+            border:   '#252d3d',
+            muted:    '#4a5568',
+            accent:   '#6c63ff',
+            accentHv: '#5a52e0',
+            green:    '#10b981',
+            red:      '#ef4444',
+            amber:    '#f59e0b',
+            cyan:     '#06b6d4',
+          },
+          fontFamily: {
+            sans: ['"Inter"', 'system-ui', 'sans-serif'],
+          },
+          boxShadow: {
+            glass: '0 8px 32px rgba(0,0,0,0.4)',
+            glow:  '0 0 20px rgba(108,99,255,0.25)',
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: 'Inter', sans-serif; background: #0f1117; color: #e2e8f0; }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #0f1117; }
+    ::-webkit-scrollbar-thumb { background: #252d3d; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #6c63ff; }
+
+    .glass {
+      background: rgba(22, 27, 39, 0.8);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+    .glow-border { box-shadow: 0 0 0 1px rgba(108,99,255,0.4), 0 0 20px rgba(108,99,255,0.15); }
+
+    /* Progress bar animation */
+    .progress-bar { transition: width 0.8s cubic-bezier(0.4,0,0.2,1); }
+
+    /* Slide-in modal */
+    .modal-backdrop {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+      backdrop-filter: blur(4px); z-index: 50;
+      display: flex; align-items: center; justify-content: center;
+      opacity: 0; pointer-events: none; transition: opacity 0.25s ease;
+    }
+    .modal-backdrop.open { opacity: 1; pointer-events: auto; }
+    .modal-box {
+      transform: translateY(24px) scale(0.97);
+      transition: transform 0.3s cubic-bezier(0.4,0,0.2,1);
+    }
+    .modal-backdrop.open .modal-box { transform: translateY(0) scale(1); }
+
+    /* Toast */
+    #toast {
+      position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 99;
+      padding: 0.75rem 1.25rem; border-radius: 0.75rem; font-size: 0.85rem;
+      font-weight: 500; transform: translateY(80px); opacity: 0;
+      transition: all 0.35s cubic-bezier(0.4,0,0.2,1);
+    }
+    #toast.show { transform: translateY(0); opacity: 1; }
+
+    /* AI typing animation */
+    .typing-dot {
+      width: 6px; height: 6px; background: #6c63ff;
+      border-radius: 50%; animation: bounce 1.2s infinite;
+    }
+    .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+    .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes bounce {
+      0%, 60%, 100% { transform: translateY(0); }
+      30%            { transform: translateY(-6px); }
+    }
+
+    /* Category color dots */
+    .cat-food        { background: #f59e0b; }
+    .cat-transport   { background: #06b6d4; }
+    .cat-shopping    { background: #ec4899; }
+    .cat-entertainment { background: #8b5cf6; }
+    .cat-health      { background: #10b981; }
+    .cat-bills       { background: #ef4444; }
+    .cat-travel      { background: #3b82f6; }
+    .cat-education   { background: #f97316; }
+    .cat-groceries   { background: #84cc16; }
+    .cat-other       { background: #6b7280; }
+
+    /* Fade-in for list items */
+    @keyframes fadeSlide {
+      from { opacity:0; transform: translateY(8px); }
+      to   { opacity:1; transform: translateY(0); }
+    }
+    .fade-in { animation: fadeSlide 0.3s ease forwards; }
+
+    /* Nav tab active */
+    .nav-tab.active { color: #6c63ff; border-bottom: 2px solid #6c63ff; }
+    .nav-tab { border-bottom: 2px solid transparent; transition: all 0.2s; }
+
+    /* Stat card hover */
+    .stat-card { transition: transform 0.2s, box-shadow 0.2s; }
+    .stat-card:hover { transform: translateY(-2px); box-shadow: 0 12px 32px rgba(0,0,0,0.5); }
+  </style>
+</head>
+
+<body class="min-h-screen bg-surface text-slate-200">
+
+<!-- ──────────── TOAST ──────────── -->
+<div id="toast"></div>
+
+<!-- ──────────── HEADER ──────────── -->
+<header class="sticky top-0 z-40 border-b border-border" style="background:rgba(15,17,23,0.95);backdrop-filter:blur(16px)">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="flex items-center justify-between h-16">
+      <!-- Logo -->
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-xl bg-accent flex items-center justify-center shadow-glow">
+          <i data-lucide="wallet" class="w-5 h-5 text-white"></i>
+        </div>
+        <div>
+          <h1 class="text-base font-700 text-white leading-none">WiseSpend</h1>
+          <p class="text-xs text-muted leading-none mt-0.5">Smart Expense Tracker</p>
+        </div>
+      </div>
+
+      <!-- Nav tabs (desktop) -->
+      <nav class="hidden md:flex items-center gap-1">
+        <button onclick="switchTab('dashboard')" id="tab-dashboard" class="nav-tab active px-4 py-5 text-sm font-500 text-slate-300 hover:text-white">Dashboard</button>
+        <button onclick="switchTab('transactions')" id="tab-transactions" class="nav-tab px-4 py-5 text-sm font-500 text-slate-300 hover:text-white">Transactions</button>
+        <button onclick="switchTab('budgets')" id="tab-budgets" class="nav-tab px-4 py-5 text-sm font-500 text-slate-300 hover:text-white">Budgets</button>
+        <button onclick="switchTab('ai')" id="tab-ai" class="nav-tab px-4 py-5 text-sm font-500 text-slate-300 hover:text-white">
+          <span class="flex items-center gap-1.5">
+            <i data-lucide="sparkles" class="w-3.5 h-3.5 text-accent"></i> AI Insights
+          </span>
+        </button>
+      </nav>
+
+      <!-- Add expense button -->
+      <button onclick="openAddModal()" class="flex items-center gap-2 bg-accent hover:bg-accentHv text-white text-sm font-600 px-4 py-2 rounded-xl transition-all shadow-glow hover:shadow-lg">
+        <i data-lucide="plus" class="w-4 h-4"></i>
+        <span class="hidden sm:inline">Add Expense</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Mobile nav -->
+  <div class="md:hidden border-t border-border flex">
+    <button onclick="switchTab('dashboard')"    class="nav-tab active flex-1 py-3 text-xs text-slate-400" id="mob-tab-dashboard">📊 Dashboard</button>
+    <button onclick="switchTab('transactions')" class="nav-tab flex-1 py-3 text-xs text-slate-400" id="mob-tab-transactions">📋 History</button>
+    <button onclick="switchTab('budgets')"      class="nav-tab flex-1 py-3 text-xs text-slate-400" id="mob-tab-budgets">🎯 Budgets</button>
+    <button onclick="switchTab('ai')"           class="nav-tab flex-1 py-3 text-xs text-slate-400" id="mob-tab-ai">✨ AI</button>
+  </div>
+</header>
+
+<main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+  <!-- ═══════════════ DASHBOARD TAB ═══════════════ -->
+  <div id="page-dashboard">
+
+    <!-- Stat cards -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6" id="stat-cards">
+      <div class="stat-card glass rounded-2xl p-5">
+        <p class="text-xs text-muted uppercase tracking-wide mb-1">This Month</p>
+        <p class="text-2xl font-700 text-white" id="stat-month">₹—</p>
+        <p class="text-xs mt-1" id="stat-month-change">vs last month</p>
+      </div>
+      <div class="stat-card glass rounded-2xl p-5">
+        <p class="text-xs text-muted uppercase tracking-wide mb-1">All Time</p>
+        <p class="text-2xl font-700 text-white" id="stat-alltime">₹—</p>
+        <p class="text-xs text-muted mt-1" id="stat-txcount">0 transactions</p>
+      </div>
+      <div class="stat-card glass rounded-2xl p-5">
+        <p class="text-xs text-muted uppercase tracking-wide mb-1">Avg / Day</p>
+        <p class="text-2xl font-700 text-white" id="stat-avg">₹—</p>
+        <p class="text-xs text-muted mt-1">this month</p>
+      </div>
+      <div class="stat-card glass rounded-2xl p-5">
+        <p class="text-xs text-muted uppercase tracking-wide mb-1">Top Category</p>
+        <p class="text-2xl font-700 text-white" id="stat-topcat">—</p>
+        <p class="text-xs text-muted mt-1" id="stat-topcat-val"></p>
+      </div>
+    </div>
+
+    <!-- Charts row -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+      <!-- Daily spending line chart -->
+      <div class="lg:col-span-2 glass rounded-2xl p-5">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-sm font-600 text-white">Daily Spending</h3>
+          <span class="text-xs text-muted">This month</span>
+        </div>
+        <div class="relative h-52">
+          <canvas id="chart-daily"></canvas>
+        </div>
+      </div>
+
+      <!-- Category donut chart -->
+      <div class="glass rounded-2xl p-5">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-sm font-600 text-white">By Category</h3>
+          <span class="text-xs text-muted">This month</span>
+        </div>
+        <div class="relative h-40">
+          <canvas id="chart-cat"></canvas>
+        </div>
+        <div id="cat-legend" class="mt-3 space-y-1.5 max-h-28 overflow-y-auto"></div>
+      </div>
+    </div>
+
+    <!-- Recent transactions -->
+    <div class="glass rounded-2xl">
+      <div class="flex items-center justify-between p-5 border-b border-border">
+        <h3 class="text-sm font-600 text-white">Recent Transactions</h3>
+        <button onclick="switchTab('transactions')" class="text-xs text-accent hover:text-white transition-colors">View all →</button>
+      </div>
+      <div id="recent-list" class="divide-y divide-border">
+        <div class="p-8 text-center text-muted text-sm">Loading...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════ TRANSACTIONS TAB ═══════════════ -->
+  <div id="page-transactions" class="hidden">
+    <!-- Filters -->
+    <div class="glass rounded-2xl p-4 mb-4 flex flex-wrap gap-3 items-center">
+      <div class="relative flex-1 min-w-40">
+        <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted pointer-events-none"></i>
+        <input id="filter-search" type="text" placeholder="Search..." oninput="loadTransactions()"
+          class="w-full bg-surface border border-border rounded-xl pl-9 pr-3 py-2.5 text-sm text-white placeholder-muted focus:outline-none focus:border-accent">
+      </div>
+      <select id="filter-cat" onchange="loadTransactions()"
+        class="bg-surface border border-border rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-accent">
+        <option value="">All Categories</option>
+      </select>
+      <input id="filter-start" type="date" onchange="loadTransactions()"
+        class="bg-surface border border-border rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-accent">
+      <input id="filter-end" type="date" onchange="loadTransactions()"
+        class="bg-surface border border-border rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-accent">
+      <button onclick="clearFilters()" class="text-xs text-muted hover:text-white transition-colors px-2">Clear</button>
+    </div>
+
+    <!-- Transaction list -->
+    <div class="glass rounded-2xl">
+      <div id="tx-list" class="divide-y divide-border min-h-40">
+        <div class="p-8 text-center text-muted text-sm">Loading...</div>
+      </div>
+      <!-- Pagination -->
+      <div id="tx-pagination" class="flex items-center justify-between p-4 border-t border-border text-sm text-muted hidden">
+        <span id="tx-showing"></span>
+        <div class="flex gap-2">
+          <button onclick="txPage(-1)" id="btn-prev" class="px-3 py-1.5 rounded-lg border border-border hover:border-accent hover:text-accent transition-colors">← Prev</button>
+          <button onclick="txPage(1)"  id="btn-next" class="px-3 py-1.5 rounded-lg border border-border hover:border-accent hover:text-accent transition-colors">Next →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════ BUDGETS TAB ═══════════════ -->
+  <div id="page-budgets" class="hidden">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-base font-600 text-white">Monthly Budgets</h2>
+      <button onclick="openBudgetModal()" class="flex items-center gap-2 bg-accent hover:bg-accentHv text-white text-sm px-4 py-2 rounded-xl transition-all">
+        <i data-lucide="plus" class="w-4 h-4"></i> Set Budget
+      </button>
+    </div>
+    <div id="budget-list" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div class="glass rounded-2xl p-8 text-center text-muted text-sm col-span-full">Loading...</div>
+    </div>
+  </div>
+
+  <!-- ═══════════════ AI INSIGHTS TAB ═══════════════ -->
+  <div id="page-ai" class="hidden">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+      <!-- Chat panel -->
+      <div class="lg:col-span-2 glass rounded-2xl flex flex-col" style="height:calc(100vh - 14rem)">
+        <div class="flex items-center gap-3 p-4 border-b border-border">
+          <div class="w-8 h-8 rounded-full bg-accent/20 flex items-center justify-center">
+            <i data-lucide="sparkles" class="w-4 h-4 text-accent"></i>
+          </div>
+          <div>
+            <p class="text-sm font-600 text-white">WiseAI</p>
+            <p class="text-xs text-green flex items-center gap-1"><span class="w-1.5 h-1.5 bg-green rounded-full inline-block"></span> Powered by OpenRouter</p>
+          </div>
+        </div>
+
+        <!-- Messages -->
+        <div id="ai-messages" class="flex-1 overflow-y-auto p-4 space-y-4">
+          <div class="flex gap-3">
+            <div class="w-8 h-8 rounded-full bg-accent/20 flex items-center justify-center shrink-0">
+              <i data-lucide="sparkles" class="w-4 h-4 text-accent"></i>
+            </div>
+            <div class="bg-card rounded-2xl rounded-tl-sm px-4 py-3 max-w-md">
+              <p class="text-sm text-slate-300 leading-relaxed">Hi! I'm WiseAI, your personal finance advisor. I can analyze your spending patterns and give you actionable advice. Try asking me:</p>
+              <div class="mt-3 space-y-1.5">
+                <button onclick="askAI('Where am I spending the most this month?')" class="block w-full text-left text-xs text-accent border border-border rounded-lg px-3 py-2 hover:border-accent/50 transition-colors">📊 Where am I spending the most?</button>
+                <button onclick="askAI('Give me tips to reduce my expenses.')" class="block w-full text-left text-xs text-accent border border-border rounded-lg px-3 py-2 hover:border-accent/50 transition-colors">💡 Tips to reduce my expenses</button>
+                <button onclick="askAI('Am I spending within healthy limits?')" class="block w-full text-left text-xs text-accent border border-border rounded-lg px-3 py-2 hover:border-accent/50 transition-colors">✅ Am I spending within healthy limits?</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Input -->
+        <div class="p-4 border-t border-border flex gap-2">
+          <input id="ai-input" type="text" placeholder="Ask about your spending..."
+            class="flex-1 bg-surface border border-border rounded-xl px-4 py-3 text-sm text-white placeholder-muted focus:outline-none focus:border-accent transition-colors"
+            onkeydown="if(event.key==='Enter')sendAI()">
+          <button onclick="sendAI()" id="ai-send-btn"
+            class="bg-accent hover:bg-accentHv text-white rounded-xl px-4 py-3 transition-all flex items-center gap-2 text-sm font-500">
+            <i data-lucide="send" class="w-4 h-4"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Quick prompts + history -->
+      <div class="space-y-4">
+        <div class="glass rounded-2xl p-4">
+          <h3 class="text-sm font-600 text-white mb-3">Quick Prompts</h3>
+          <div class="space-y-2">
+            <button onclick="askAI('What is my biggest unnecessary expense?')" class="w-full text-left text-xs text-slate-400 hover:text-white border border-border hover:border-accent/50 rounded-xl p-3 transition-all">🔍 Biggest unnecessary expense</button>
+            <button onclick="askAI('How does my spending compare to recommended budgets?')" class="w-full text-left text-xs text-slate-400 hover:text-white border border-border hover:border-accent/50 rounded-xl p-3 transition-all">📈 Compare to recommended budgets</button>
+            <button onclick="askAI('Give me a 3-step plan to save more money next month.')" class="w-full text-left text-xs text-slate-400 hover:text-white border border-border hover:border-accent/50 rounded-xl p-3 transition-all">🗓️ 3-step savings plan</button>
+            <button onclick="askAI('Categorize my spending habits and tell me what they say about me.')" class="w-full text-left text-xs text-slate-400 hover:text-white border border-border hover:border-accent/50 rounded-xl p-3 transition-all">🧠 What my habits say about me</button>
+          </div>
+        </div>
+
+        <div class="glass rounded-2xl p-4">
+          <h3 class="text-sm font-600 text-white mb-3">AI Config</h3>
+          <div class="space-y-3">
+            <div>
+              <label class="text-xs text-muted block mb-1">OpenRouter API Key</label>
+              <input id="api-key-input" type="password" placeholder="sk-or-v1-..."
+                class="w-full bg-surface border border-border rounded-lg px-3 py-2 text-xs text-white placeholder-muted focus:outline-none focus:border-accent">
+            </div>
+            <button onclick="saveApiKey()" class="w-full bg-card hover:bg-cardHov border border-border text-xs text-slate-300 rounded-lg px-3 py-2 transition-colors">Save Key</button>
+            <p class="text-xs text-muted">Get a free key at <a href="https://openrouter.ai" target="_blank" class="text-accent hover:underline">openrouter.ai</a></p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- ══════════════════════════════════════════
+     ADD EXPENSE MODAL
+══════════════════════════════════════════ -->
+<div id="modal-add" class="modal-backdrop" onclick="if(event.target===this)closeAddModal()">
+  <div class="modal-box glass rounded-2xl p-6 w-full max-w-md mx-4 shadow-glass">
+    <div class="flex items-center justify-between mb-6">
+      <h2 class="text-base font-600 text-white" id="modal-add-title">Add Expense</h2>
+      <button onclick="closeAddModal()" class="text-muted hover:text-white transition-colors">
+        <i data-lucide="x" class="w-5 h-5"></i>
+      </button>
+    </div>
+
+    <form id="form-expense" onsubmit="submitExpense(event)" class="space-y-4">
+      <input type="hidden" id="edit-id">
+
+      <!-- Amount -->
+      <div>
+        <label class="text-xs text-muted block mb-1.5">Amount *</label>
+        <div class="relative">
+          <span class="absolute left-3 top-1/2 -translate-y-1/2 text-muted text-sm">₹</span>
+          <input id="inp-amount" type="number" step="0.01" min="0.01" required placeholder="0.00"
+            class="w-full bg-surface border border-border rounded-xl pl-8 pr-3 py-3 text-white text-lg font-600 focus:outline-none focus:border-accent focus:glow-border transition-all placeholder-muted">
+        </div>
+      </div>
+
+      <!-- Category -->
+      <div>
+        <label class="text-xs text-muted block mb-1.5">Category *</label>
+        <div class="grid grid-cols-5 gap-2" id="cat-picker">
+          <!-- Rendered by JS -->
+        </div>
+      </div>
+
+      <!-- Description -->
+      <div>
+        <label class="text-xs text-muted block mb-1.5">Description *</label>
+        <input id="inp-desc" type="text" required placeholder="What was this for?"
+          class="w-full bg-surface border border-border rounded-xl px-3 py-3 text-white text-sm focus:outline-none focus:border-accent transition-all placeholder-muted">
+      </div>
+
+      <!-- Date -->
+      <div>
+        <label class="text-xs text-muted block mb-1.5">Date</label>
+        <input id="inp-date" type="date"
+          class="w-full bg-surface border border-border rounded-xl px-3 py-3 text-white text-sm focus:outline-none focus:border-accent transition-all">
+      </div>
+
+      <!-- Note -->
+      <div>
+        <label class="text-xs text-muted block mb-1.5">Note (optional)</label>
+        <textarea id="inp-note" rows="2" placeholder="Any additional details..."
+          class="w-full bg-surface border border-border rounded-xl px-3 py-3 text-white text-sm focus:outline-none focus:border-accent transition-all placeholder-muted resize-none"></textarea>
+      </div>
+
+      <div class="flex gap-3 pt-2">
+        <button type="button" onclick="closeAddModal()" class="flex-1 border border-border text-slate-400 hover:text-white rounded-xl py-3 text-sm font-500 transition-colors">Cancel</button>
+        <button type="submit" class="flex-1 bg-accent hover:bg-accentHv text-white rounded-xl py-3 text-sm font-600 transition-all shadow-glow" id="submit-btn">Save Expense</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     BUDGET MODAL
+══════════════════════════════════════════ -->
+<div id="modal-budget" class="modal-backdrop" onclick="if(event.target===this)closeBudgetModal()">
+  <div class="modal-box glass rounded-2xl p-6 w-full max-w-sm mx-4 shadow-glass">
+    <div class="flex items-center justify-between mb-6">
+      <h2 class="text-base font-600 text-white">Set Budget</h2>
+      <button onclick="closeBudgetModal()" class="text-muted hover:text-white transition-colors">
+        <i data-lucide="x" class="w-5 h-5"></i>
+      </button>
+    </div>
+    <form id="form-budget" onsubmit="submitBudget(event)" class="space-y-4">
+      <div>
+        <label class="text-xs text-muted block mb-1.5">Category</label>
+        <select id="bud-cat" class="w-full bg-surface border border-border rounded-xl px-3 py-3 text-white text-sm focus:outline-none focus:border-accent">
+        </select>
+      </div>
+      <div>
+        <label class="text-xs text-muted block mb-1.5">Monthly Limit (₹)</label>
+        <div class="relative">
+          <span class="absolute left-3 top-1/2 -translate-y-1/2 text-muted text-sm">₹</span>
+          <input id="bud-amount" type="number" min="1" required placeholder="5000"
+            class="w-full bg-surface border border-border rounded-xl pl-8 pr-3 py-3 text-white text-sm focus:outline-none focus:border-accent transition-all placeholder-muted">
+        </div>
+      </div>
+      <div class="flex gap-3 pt-2">
+        <button type="button" onclick="closeBudgetModal()" class="flex-1 border border-border text-slate-400 hover:text-white rounded-xl py-3 text-sm font-500 transition-colors">Cancel</button>
+        <button type="submit" class="flex-1 bg-accent hover:bg-accentHv text-white rounded-xl py-3 text-sm font-600 transition-all shadow-glow">Save Budget</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     DELETE CONFIRM MODAL
+══════════════════════════════════════════ -->
+<div id="modal-delete" class="modal-backdrop" onclick="if(event.target===this)closeDeleteModal()">
+  <div class="modal-box glass rounded-2xl p-6 w-full max-w-sm mx-4 shadow-glass text-center">
+    <div class="w-12 h-12 bg-red/10 rounded-full flex items-center justify-center mx-auto mb-4">
+      <i data-lucide="trash-2" class="w-6 h-6 text-red"></i>
+    </div>
+    <h3 class="text-base font-600 text-white mb-2">Delete Expense?</h3>
+    <p class="text-sm text-muted mb-6">This action cannot be undone.</p>
+    <div class="flex gap-3">
+      <button onclick="closeDeleteModal()" class="flex-1 border border-border text-slate-400 hover:text-white rounded-xl py-3 text-sm font-500 transition-colors">Cancel</button>
+      <button onclick="confirmDelete()" class="flex-1 bg-red hover:bg-red/80 text-white rounded-xl py-3 text-sm font-600 transition-all">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- Server-injected JSON data island — not parsed as JS by the IDE -->
+<script type="application/json" id="app-data">
+  { "categories": {{ categories|safe }} }
+</script>
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// STATE
+// ─────────────────────────────────────────────────────────────────────────────
+const _appData   = JSON.parse(document.getElementById('app-data').textContent);
+const CATEGORIES = _appData.categories;
+
+const CAT_COLORS = {
+  'Food & Dining':    '#f59e0b',
+  'Transport':        '#06b6d4',
+  'Shopping':         '#ec4899',
+  'Entertainment':    '#8b5cf6',
+  'Health & Fitness': '#10b981',
+  'Bills & Utilities':'#ef4444',
+  'Travel':           '#3b82f6',
+  'Education':        '#f97316',
+  'Groceries':        '#84cc16',
+  'Other':            '#6b7280',
+};
+
+const CAT_EMOJIS = {
+  'Food & Dining':    '🍽️',
+  'Transport':        '🚗',
+  'Shopping':         '🛍️',
+  'Entertainment':    '🎬',
+  'Health & Fitness': '💪',
+  'Bills & Utilities':'⚡',
+  'Travel':           '✈️',
+  'Education':        '📚',
+  'Groceries':        '🛒',
+  'Other':            '📦',
+};
+
+let selectedCategory = CATEGORIES[0];
+let editingId        = null;
+let deleteId         = null;
+let txOffset         = 0;
+const TX_LIMIT       = 20;
+let txTotal          = 0;
+let dailyChart       = null;
+let catChart         = null;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INIT
+// ─────────────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  lucide.createIcons();
+  buildCategoryPicker();
+  buildCategorySelects();
+  setToday();
+  loadDashboard();
+
+  // Restore saved API key
+  const saved = localStorage.getItem('openrouter_key');
+  if (saved) document.getElementById('api-key-input').value = saved;
+});
+
+function setToday() {
+  document.getElementById('inp-date').value = new Date().toISOString().split('T')[0];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// NAVIGATION
+// ─────────────────────────────────────────────────────────────────────────────
+const TABS = ['dashboard', 'transactions', 'budgets', 'ai'];
+
+function switchTab(tab) {
+  TABS.forEach(t => {
+    document.getElementById(`page-${t}`).classList.toggle('hidden', t !== tab);
+    const el   = document.getElementById(`tab-${t}`);
+    const mob  = document.getElementById(`mob-tab-${t}`);
+    if (el)  el .classList.toggle('active', t === tab);
+    if (mob) mob.classList.toggle('active', t === tab);
+  });
+
+  if (tab === 'transactions') loadTransactions();
+  if (tab === 'budgets')      loadBudgets();
+  lucide.createIcons();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DASHBOARD
+// ─────────────────────────────────────────────────────────────────────────────
+async function loadDashboard() {
+  const [stats, recent] = await Promise.all([
+    fetch('/api/stats/summary').then(r => r.json()),
+    fetch('/api/expenses?limit=5').then(r => r.json()),
+  ]);
+
+  // Stat cards
+  document.getElementById('stat-month').textContent = '₹' + fmt(stats.month_total);
+  document.getElementById('stat-alltime').textContent = '₹' + fmt(stats.all_time);
+  document.getElementById('stat-txcount').textContent = stats.tx_count + ' transactions';
+
+  // Month change
+  const change = stats.month_total - stats.prev_total;
+  const pct    = stats.prev_total > 0 ? ((change / stats.prev_total) * 100).toFixed(1) : 0;
+  const el = document.getElementById('stat-month-change');
+  if (change >= 0) {
+    el.innerHTML = `<span class="text-red">▲ ${Math.abs(pct)}%</span> vs last month`;
+  } else {
+    el.innerHTML = `<span class="text-green">▼ ${Math.abs(pct)}%</span> vs last month`;
+  }
+
+  // Avg / day
+  const daysIn  = new Date().getDate();
+  const avg = daysIn > 0 ? stats.month_total / daysIn : 0;
+  document.getElementById('stat-avg').textContent = '₹' + fmt(avg);
+
+  // Top category
+  if (stats.categories.length > 0) {
+    const top = stats.categories[0];
+    document.getElementById('stat-topcat').textContent = CAT_EMOJIS[top.category] + ' ' + top.category.split(' ')[0];
+    document.getElementById('stat-topcat-val').textContent = '₹' + fmt(top.total);
+  }
+
+  // Daily chart
+  buildDailyChart(stats.daily, stats.month_start);
+
+  // Category donut
+  buildCatChart(stats.categories);
+
+  // Recent transactions
+  renderTxList(document.getElementById('recent-list'), recent.expenses, false);
+  lucide.createIcons();
+}
+
+function buildDailyChart(daily, monthStart) {
+  const ctx = document.getElementById('chart-daily');
+  if (!ctx) return;
+  if (dailyChart) dailyChart.destroy();
+
+  // Fill all days of month
+  const now     = new Date();
+  const start   = new Date(monthStart);
+  const labels  = [], data = [];
+
+  const map = {};
+  daily.forEach(d => map[d.date] = d.total);
+
+  for (let d = new Date(start); d <= now; d.setDate(d.getDate() + 1)) {
+    const key = d.toISOString().split('T')[0];
+    labels.push(d.getDate());
+    data.push(map[key] || 0);
+  }
+
+  dailyChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        data,
+        borderColor: '#6c63ff',
+        backgroundColor: 'rgba(108,99,255,0.08)',
+        borderWidth: 2,
+        pointRadius: 3,
+        pointBackgroundColor: '#6c63ff',
+        pointBorderColor: '#0f1117',
+        pointBorderWidth: 1.5,
+        fill: true,
+        tension: 0.4,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#4a5568', font: { size: 10 } } },
+        y: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#4a5568', font: { size: 10 }, callback: v => '₹' + v } },
+      }
+    }
+  });
+}
+
+function buildCatChart(cats) {
+  const ctx = document.getElementById('chart-cat');
+  if (!ctx) return;
+  if (catChart) catChart.destroy();
+
+  const labels  = cats.map(c => c.category);
+  const data    = cats.map(c => c.total);
+  const colors  = cats.map(c => CAT_COLORS[c.category] || '#6b7280');
+
+  catChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: { labels, datasets: [{ data, backgroundColor: colors, borderColor: '#0f1117', borderWidth: 2 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '72%',
+      plugins: { legend: { display: false } }
+    }
+  });
+
+  // Legend
+  const leg = document.getElementById('cat-legend');
+  leg.innerHTML = cats.slice(0, 5).map(c =>
+    `<div class="flex items-center justify-between">
+       <div class="flex items-center gap-1.5">
+         <div class="w-2.5 h-2.5 rounded-full" style="background:${CAT_COLORS[c.category]||'#6b7280'}"></div>
+         <span class="text-xs text-slate-400 truncate max-w-[110px]">${c.category}</span>
+       </div>
+       <span class="text-xs text-white font-500">₹${fmt(c.total)}</span>
+     </div>`
+  ).join('');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RENDER TX ROW
+// ─────────────────────────────────────────────────────────────────────────────
+function renderTxList(container, expenses, showActions = true) {
+  if (!expenses || expenses.length === 0) {
+    container.innerHTML = `<div class="p-8 text-center text-muted text-sm">No transactions found. <button onclick="openAddModal()" class="text-accent hover:underline">Add one →</button></div>`;
+    return;
+  }
+
+  container.innerHTML = expenses.map((e, i) => `
+    <div class="flex items-center gap-4 px-5 py-4 hover:bg-cardHov transition-colors group fade-in" style="animation-delay:${i * 0.04}s">
+      <div class="w-10 h-10 rounded-xl flex items-center justify-center text-lg shrink-0"
+           style="background:${CAT_COLORS[e.category] || '#6b7280'}20">
+        ${CAT_EMOJIS[e.category] || '📦'}
+      </div>
+      <div class="flex-1 min-w-0">
+        <p class="text-sm font-500 text-white truncate">${esc(e.description)}</p>
+        <p class="text-xs text-muted">${e.category} · ${formatDate(e.date)}</p>
+        ${e.note ? `<p class="text-xs text-muted/70 truncate">${esc(e.note)}</p>` : ''}
+      </div>
+      <div class="text-right shrink-0">
+        <p class="text-sm font-700 text-red">−₹${fmt(e.amount)}</p>
+        ${showActions ? `
+        <div class="flex gap-1 justify-end mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button onclick="openEditModal(${JSON.stringify(e).replace(/"/g,'&quot;')})"
+            class="text-muted hover:text-accent p-1 rounded transition-colors" title="Edit">
+            <i data-lucide="pencil" class="w-3 h-3"></i>
+          </button>
+          <button onclick="openDeleteModal(${e.id})"
+            class="text-muted hover:text-red p-1 rounded transition-colors" title="Delete">
+            <i data-lucide="trash-2" class="w-3 h-3"></i>
+          </button>
+        </div>` : ''}
+      </div>
+    </div>`
+  ).join('');
+  lucide.createIcons();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TRANSACTIONS
+// ─────────────────────────────────────────────────────────────────────────────
+async function loadTransactions() {
+  const search = document.getElementById('filter-search')?.value || '';
+  const cat    = document.getElementById('filter-cat')?.value    || '';
+  const start  = document.getElementById('filter-start')?.value  || '';
+  const end    = document.getElementById('filter-end')?.value    || '';
+
+  const params = new URLSearchParams({ limit: TX_LIMIT, offset: txOffset });
+  if (search) params.set('search', search);
+  if (cat)    params.set('category', cat);
+  if (start)  params.set('start', start);
+  if (end)    params.set('end', end);
+
+  const data = await fetch('/api/expenses?' + params).then(r => r.json());
+  txTotal = data.total;
+
+  const list = document.getElementById('tx-list');
+  renderTxList(list, data.expenses, true);
+
+  // Pagination
+  const pag = document.getElementById('tx-pagination');
+  if (txTotal > TX_LIMIT) {
+    pag.classList.remove('hidden');
+    document.getElementById('tx-showing').textContent =
+      `Showing ${txOffset + 1}–${Math.min(txOffset + TX_LIMIT, txTotal)} of ${txTotal}`;
+    document.getElementById('btn-prev').disabled = txOffset === 0;
+    document.getElementById('btn-next').disabled = txOffset + TX_LIMIT >= txTotal;
+  } else {
+    pag.classList.add('hidden');
+  }
+}
+
+function txPage(dir) {
+  txOffset = Math.max(0, Math.min(txOffset + dir * TX_LIMIT, txTotal - TX_LIMIT));
+  loadTransactions();
+}
+
+function clearFilters() {
+  ['filter-search','filter-cat','filter-start','filter-end'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  txOffset = 0;
+  loadTransactions();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ADD / EDIT EXPENSE
+// ─────────────────────────────────────────────────────────────────────────────
+function buildCategoryPicker() {
+  const picker = document.getElementById('cat-picker');
+  if (!picker) return;
+  picker.innerHTML = CATEGORIES.map(cat =>
+    `<button type="button" onclick="selectCat('${cat}')" id="catbtn-${cat.replace(/[^a-z]/gi,'_')}"
+       title="${cat}"
+       class="cat-btn h-10 rounded-xl flex items-center justify-center text-xl transition-all border border-transparent hover:border-accent/50"
+       style="background:${CAT_COLORS[cat]}18">
+       ${CAT_EMOJIS[cat]}
+     </button>`
+  ).join('');
+  selectCat(CATEGORIES[0]);
+}
+
+function selectCat(cat) {
+  selectedCategory = cat;
+  document.querySelectorAll('.cat-btn').forEach(b => {
+    b.classList.remove('border-accent', 'shadow-glow');
+    b.style.background = CAT_COLORS[CATEGORIES.find(c => b.title === c)] + '18';
+  });
+  const btn = document.getElementById('catbtn-' + cat.replace(/[^a-z]/gi, '_'));
+  if (btn) {
+    btn.classList.add('border-accent', 'shadow-glow');
+    btn.style.background = CAT_COLORS[cat] + '35';
+  }
+}
+
+function buildCategorySelects() {
+  ['filter-cat', 'bud-cat'].forEach(id => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    const opts = CATEGORIES.map(c =>
+      `<option value="${c}">${CAT_EMOJIS[c]} ${c}</option>`
+    ).join('');
+    if (id === 'filter-cat') sel.innerHTML = '<option value="">All Categories</option>' + opts;
+    else sel.innerHTML = opts;
+  });
+}
+
+function openAddModal() {
+  editingId = null;
+  document.getElementById('modal-add-title').textContent = 'Add Expense';
+  document.getElementById('submit-btn').textContent = 'Save Expense';
+  document.getElementById('form-expense').reset();
+  document.getElementById('edit-id').value = '';
+  setToday();
+  selectCat(CATEGORIES[0]);
+  document.getElementById('modal-add').classList.add('open');
+}
+
+function openEditModal(exp) {
+  editingId = exp.id;
+  document.getElementById('modal-add-title').textContent = 'Edit Expense';
+  document.getElementById('submit-btn').textContent = 'Update Expense';
+  document.getElementById('edit-id').value = exp.id;
+  document.getElementById('inp-amount').value = exp.amount;
+  document.getElementById('inp-desc').value   = exp.description;
+  document.getElementById('inp-date').value   = exp.date;
+  document.getElementById('inp-note').value   = exp.note || '';
+  selectCat(exp.category);
+  document.getElementById('modal-add').classList.add('open');
+}
+
+function closeAddModal() {
+  document.getElementById('modal-add').classList.remove('open');
+}
+
+async function submitExpense(e) {
+  e.preventDefault();
+  const btn    = document.getElementById('submit-btn');
+  btn.textContent = editingId ? 'Updating...' : 'Saving...';
+  btn.disabled = true;
+
+  const payload = {
+    amount:      parseFloat(document.getElementById('inp-amount').value),
+    category:    selectedCategory,
+    description: document.getElementById('inp-desc').value,
+    date:        document.getElementById('inp-date').value,
+    note:        document.getElementById('inp-note').value,
+  };
+
+  const url    = editingId ? `/api/expenses/${editingId}` : '/api/expenses';
+  const method = editingId ? 'PUT' : 'POST';
+
+  const resp = await fetch(url, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  const data = await resp.json();
+
+  btn.disabled = false;
+  btn.textContent = editingId ? 'Update Expense' : 'Save Expense';
+
+  if (data.error) { showToast(data.error, 'error'); return; }
+
+  closeAddModal();
+  showToast(editingId ? 'Expense updated!' : 'Expense added!', 'success');
+  loadDashboard();
+  if (!document.getElementById('page-transactions').classList.contains('hidden')) loadTransactions();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DELETE
+// ─────────────────────────────────────────────────────────────────────────────
+function openDeleteModal(id)  { deleteId = id; document.getElementById('modal-delete').classList.add('open'); }
+function closeDeleteModal()   { document.getElementById('modal-delete').classList.remove('open'); }
+
+async function confirmDelete() {
+  await fetch(`/api/expenses/${deleteId}`, { method: 'DELETE' });
+  closeDeleteModal();
+  showToast('Expense deleted', 'info');
+  loadDashboard();
+  if (!document.getElementById('page-transactions').classList.contains('hidden')) loadTransactions();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BUDGETS
+// ─────────────────────────────────────────────────────────────────────────────
+function openBudgetModal()  { document.getElementById('modal-budget').classList.add('open'); }
+function closeBudgetModal() { document.getElementById('modal-budget').classList.remove('open'); }
+
+async function loadBudgets() {
+  const data = await fetch('/api/budgets').then(r => r.json());
+  const list = document.getElementById('budget-list');
+
+  if (!data.budgets || data.budgets.length === 0) {
+    list.innerHTML = `<div class="glass rounded-2xl p-8 text-center text-muted text-sm col-span-full">
+      No budgets set yet. <button onclick="openBudgetModal()" class="text-accent hover:underline">Set one →</button></div>`;
+    return;
+  }
+
+  list.innerHTML = data.budgets.map(b => {
+    const overBudget = b.spent > b.amount;
+    const pct        = Math.min(b.percent, 100);
+    const color      = overBudget ? '#ef4444' : b.percent > 80 ? '#f59e0b' : '#10b981';
+    return `
+    <div class="glass rounded-2xl p-5 fade-in">
+      <div class="flex items-start justify-between mb-3">
+        <div class="flex items-center gap-2">
+          <span class="text-xl">${CAT_EMOJIS[b.category]}</span>
+          <div>
+            <p class="text-sm font-600 text-white">${b.category}</p>
+            <p class="text-xs text-muted">Monthly budget</p>
+          </div>
+        </div>
+        <button onclick="deleteBudget(${b.id})" class="text-muted hover:text-red transition-colors p-1">
+          <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+        </button>
+      </div>
+      <div class="flex items-end justify-between mb-2">
+        <span class="text-xs text-muted">₹${fmt(b.spent)} spent</span>
+        <span class="text-xs font-600" style="color:${color}">
+          ${overBudget ? '⚠️ Over by ₹' + fmt(b.spent - b.amount) : '₹' + fmt(b.amount - b.spent) + ' left'}
+        </span>
+      </div>
+      <div class="w-full bg-border rounded-full h-2 overflow-hidden">
+        <div class="h-2 rounded-full progress-bar" style="width:${pct}%;background:${color}"></div>
+      </div>
+      <div class="flex justify-between mt-1.5">
+        <span class="text-xs text-muted">${b.percent}% used</span>
+        <span class="text-xs text-muted">₹${fmt(b.amount)} limit</span>
+      </div>
+    </div>`;
+  }).join('');
+  lucide.createIcons();
+}
+
+async function submitBudget(e) {
+  e.preventDefault();
+  const cat    = document.getElementById('bud-cat').value;
+  const amount = parseFloat(document.getElementById('bud-amount').value);
+
+  const resp = await fetch('/api/budgets', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ category: cat, amount })
+  });
+  const data = await resp.json();
+
+  if (data.error) { showToast(data.error, 'error'); return; }
+  closeBudgetModal();
+  document.getElementById('form-budget').reset();
+  showToast('Budget saved!', 'success');
+  loadBudgets();
+}
+
+async function deleteBudget(id) {
+  await fetch(`/api/budgets/${id}`, { method: 'DELETE' });
+  showToast('Budget removed', 'info');
+  loadBudgets();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AI INSIGHTS
+// ─────────────────────────────────────────────────────────────────────────────
+function askAI(prompt) {
+  document.getElementById('ai-input').value = prompt;
+  sendAI();
+}
+
+function saveApiKey() {
+  const key = document.getElementById('api-key-input').value.trim();
+  if (key) {
+    localStorage.setItem('openrouter_key', key);
+    showToast('API key saved locally', 'success');
+  }
+}
+
+async function sendAI() {
+  const input = document.getElementById('ai-input');
+  const prompt = input.value.trim();
+  if (!prompt) return;
+
+  const messages = document.getElementById('ai-messages');
+  const btn      = document.getElementById('ai-send-btn');
+
+  // Append user message
+  messages.innerHTML += `
+    <div class="flex justify-end gap-3">
+      <div class="bg-accent/20 border border-accent/20 rounded-2xl rounded-tr-sm px-4 py-3 max-w-xs">
+        <p class="text-sm text-white">${esc(prompt)}</p>
+      </div>
+      <div class="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-sm shrink-0">👤</div>
+    </div>`;
+
+  input.value = '';
+  btn.disabled = true;
+
+  // Typing indicator
+  const typingId = 'typing-' + Date.now();
+  messages.innerHTML += `
+    <div id="${typingId}" class="flex gap-3">
+      <div class="w-8 h-8 rounded-full bg-accent/20 flex items-center justify-center shrink-0">
+        <i data-lucide="sparkles" class="w-4 h-4 text-accent"></i>
+      </div>
+      <div class="bg-card rounded-2xl rounded-tl-sm px-4 py-3">
+        <div class="flex gap-1.5 items-center h-4">
+          <div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>
+        </div>
+      </div>
+    </div>`;
+  messages.scrollTop = messages.scrollHeight;
+
+  // Get stored API key or fall back to env key
+  const storedKey = localStorage.getItem('openrouter_key') || '';
+
+  try {
+    const resp = await fetch('/api/ai/insights', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt, api_key: storedKey }),
+    });
+    const data = await resp.json();
+
+    document.getElementById(typingId)?.remove();
+    lucide.createIcons();
+
+    if (data.error) {
+      messages.innerHTML += `
+        <div class="flex gap-3">
+          <div class="w-8 h-8 rounded-full bg-red/20 flex items-center justify-center shrink-0 text-sm">⚠️</div>
+          <div class="bg-red/10 border border-red/20 rounded-2xl rounded-tl-sm px-4 py-3 max-w-md">
+            <p class="text-sm text-red">${esc(data.error)}</p>
+          </div>
+        </div>`;
+    } else {
+      const html = data.response
+        .replace(/\n/g, '<br>')
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/^• /gm, '&bull; ')
+        .replace(/^- /gm, '&bull; ');
+
+      messages.innerHTML += `
+        <div class="flex gap-3">
+          <div class="w-8 h-8 rounded-full bg-accent/20 flex items-center justify-center shrink-0">
+            <i data-lucide="sparkles" class="w-4 h-4 text-accent"></i>
+          </div>
+          <div class="bg-card rounded-2xl rounded-tl-sm px-4 py-3 max-w-md">
+            <p class="text-sm text-slate-300 leading-relaxed">${html}</p>
+          </div>
+        </div>`;
+    }
+  } catch (err) {
+    document.getElementById(typingId)?.remove();
+    messages.innerHTML += `<div class="text-center text-xs text-red py-2">Network error. Try again.</div>`;
+  }
+
+  btn.disabled = false;
+  messages.scrollTop = messages.scrollHeight;
+  lucide.createIcons();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UTILITIES
+// ─────────────────────────────────────────────────────────────────────────────
+function fmt(n) {
+  return Number(n).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+
+function esc(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function formatDate(d) {
+  return new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function showToast(msg, type = 'success') {
+  const t = document.getElementById('toast');
+  const colors = { success: 'bg-green text-white', error: 'bg-red text-white', info: 'bg-accent text-white' };
+  t.className = colors[type] + ' shadow-glass rounded-xl px-4 py-3 text-sm font-500';
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+</script>
+</body>
+</html>

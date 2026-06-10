@@ -14,10 +14,15 @@ from functools import wraps
 app = Flask(__name__, template_folder='templates', static_folder='static')
 
 # ── Config ─────────────────────────────────────────────────────────────────────
-DB_PATH         = os.path.join(os.path.dirname(__file__), 'wise_spend.db')
+if os.environ.get('VERCEL'):
+    DB_PATH = '/tmp/wise_spend.db'
+else:
+    DB_PATH = os.path.join(os.path.dirname(__file__), 'wise_spend.db')
+
 OPENROUTER_KEY  = os.environ.get('OPENROUTER_API_KEY', '')
 OPENROUTER_URL  = 'https://openrouter.ai/api/v1/chat/completions'
 AI_MODEL        = 'google/gemma-4-26b-a4b-it:free'
+
 
 CATEGORIES = [
     'Food & Dining',

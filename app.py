@@ -19,7 +19,7 @@ if os.environ.get('VERCEL'):
 else:
     DB_PATH = os.path.join(os.path.dirname(__file__), 'wise_spend.db')
 
-OPENROUTER_KEY  = os.environ.get('OPENROUTER_API_KEY', '')
+OPENROUTER_KEY  = os.environ.get('WISE_SPEND_API_KEY', '')
 OPENROUTER_URL  = 'https://openrouter.ai/api/v1/chat/completions'
 AI_MODEL        = 'google/gemma-4-26b-a4b-it:free'
 
